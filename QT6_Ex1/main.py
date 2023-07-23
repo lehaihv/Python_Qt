@@ -1,7 +1,7 @@
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QPushButton, QCheckBox, QLabel,
-    QVBoxLayout, QWidget, QLineEdit, QComboBox, QGridLayout
+    QApplication, QMainWindow, QPushButton, QCheckBox, QLabel, QMessageBox,
+    QVBoxLayout, QWidget, QLineEdit, QComboBox, QGridLayout, QTextEdit
 )
 from PyQt6.QtGui import QPalette, QColor
 
@@ -10,6 +10,29 @@ import sys
 
 # Pyserial
 import serial
+import time
+
+
+def URAT_setup(COMPort, baud, data, stop, parity):
+    global serial_obj
+    serial_obj = serial.Serial(COMPort)  # COMxx  format on Windows
+    # ttyUSBx format on Linux
+    serial_obj.baudrate = baud  # set Baud rate to 9600
+    serial_obj.bytesize = data  # Number of data bits = 8
+    serial_obj.stopbits = stop  # Number of Stop bits = 1
+    serial_obj.parity = parity  # No parity
+    # serial_obj.xonxoff = flow  # Flow control
+    time.sleep(1)
+
+
+def UART_send(data):
+    serial_obj.write(data.encode('utf-8'))  # transmit data (8bit)
+    time.sleep(1)
+
+
+def UART_receive():
+    data = serial_obj.read()
+    print(data)
 
 
 # Class color
@@ -52,19 +75,24 @@ class MainWindow(QMainWindow):
 
         # label
         self.label_com_port = QLabel("COM Port")
+        self.label_com_port.setFixedSize(100, 25)
         self.label_com_speed = QLabel("Speed (baud)")
+        self.label_com_speed.setFixedSize(100, 25)
         self.label_com_data = QLabel("Data bits")
         self.label_com_stop = QLabel("Stop bits")
         self.label_com_parity = QLabel("Parity")
         self.label_com_flow = QLabel("Flow control")
 
         # Text
-        self.text_port = QLineEdit("COM1")
+        self.text_port = QLineEdit("COM3")
         self.text_port.setFixedSize(100, 25)
-        self.text_send = QLineEdit("Send data")
+        self.text_send = QLineEdit()
         self.text_send.setFixedSize(500, 25)
-        self.text_receive = QLineEdit("Receive data")
-        self.text_receive.setFixedSize(500, 25)
+        self.text_send.setPlaceholderText("Enter data to send")
+        self.text_receive = QTextEdit()
+        self.text_receive.setFixedSize(500, 200)
+        self.text_receive.setPlaceholderText("Receiving data")
+        self.text_receive.textChanged.connect(self.text_receive_changed)
 
         # ComboBox Speed (baud)
         self.combobox_speed = QComboBox()
@@ -144,6 +172,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.text_send, 6, 3)
         layout.addWidget(self.text_receive, 7, 3)
 
+        # Setup UART
+        # URAT_setup("COM3", 115200, 8, 1, "N")
+        URAT_setup(self.text_port.displayText(), int(self.combobox_speed.currentText()),
+                   int(self.combobox_data.currentText()), int(self.combobox_stop.currentText()), "N")
+
         container = QWidget()
         container.setLayout(layout)
 
@@ -151,24 +184,49 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
     def the_button_send_was_clicked(self):
-        self.count += 1
-        print("Clicked!")
+        # self.count += 1
+        # print("Clicked!")
         # self.label.setText("Pressed " + str(self.count) + " times")
-        self.text_send.setText(self.text_port.displayText() + " " + self.combobox_speed.currentText() +
-                               " " + self.combobox_data.currentText() + " " + self.combobox_stop.currentText() +
-                               " " + self.combobox_parity.currentText() + " " + self.combobox_flow.currentText())
+        # self.text_send.setText(self.text_port.displayText() + " " + self.combobox_speed.currentText() +
+        #                       " " + self.combobox_data.currentText() + " " + self.combobox_stop.currentText() +
+        #                       " " + self.combobox_parity.currentText() + " " + self.combobox_flow.currentText())
+        # serial_obj.write(b'A')
+        serial_obj.write(self.text_send.displayText().encode('utf-8'))
 
     def the_button_receive_was_clicked(self):
-        self.count += 1
-        print("Clicked!")
+        # self.count += 1
+        # print("Clicked!")
         # self.label.setText("Pressed " + str(self.count) + " times")
-        self.text_receive.setText(self.combobox_speed.currentText())
+        # self.text_receive.setText(self.combobox_speed.currentText())
+        # UART_receive()
+        # data = serial_obj.read(10)  # read n bytes
+        data = serial_obj.readline()  # read a line until \n
+        # self.text_receive.setText(str(data))
+        self.text_receive.append(data.decode('utf-8'))
+
+    def text_receive_changed(self):
+        data = serial_obj.readline()  # read a line until \n
+        # self.text_receive.setText(str(data))
+        # self.text_receive.setText(self.text_receive.text() + data.decode('utf-8'))
+        # self.text_receive.append(data.decode('utf-8'))
+        print("receive changed")
 
     def parity_index_changed(self, i):  # i is an int
         print(i)
 
     def parity_text_changed(self, s):  # s is a str
         print(s)
+
+    def closeEvent(self, e):
+        print("closeEvent has been called")
+        close = QMessageBox.question(self, "QUIT", "Are you sure want to quit?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
+        if close == QMessageBox.StandardButton.Yes:
+            if serial_obj.is_open: serial_obj.close()
+            e.accept()
+        else:
+            e.ignore()
 
 
 app = QApplication(sys.argv)
